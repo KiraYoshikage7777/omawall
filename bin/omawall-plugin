@@ -13,7 +13,7 @@ MENU="$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
 LOG="$STATE/plugin.log"
 mkdir -p "$SHARE" "$STATE"
 exec >>"$LOG" 2>&1
-echo "== $(date '+%F %T') $*"
+[[ ${1:-} == off-if-disabled ]] || echo "== $(date '+%F %T') $*"
 
 menu_action="$SHARE/omawall toggle"
 
@@ -80,6 +80,20 @@ U
     omarchy-plugin-disable omarchy.background >/dev/null 2>&1 || true
   fi
 
+  # A watcher on Omarchy's plugin list: disable and remove (from the menu or
+  # the CLI) change shell.json, and the watcher undoes our changes then, even
+  # when the shell tears the plugin down without giving it a chance to clean up.
+  local wdir="${UNIT%/*}"
+  printf '%s\n' "# X-Omawall-Managed" "[Unit]" "Description=omawall: notice when the Omarchy plugin is disabled or removed" "" \
+    "[Path]" "PathChanged=%h/.config/omarchy/shell.json" "Unit=omawall-watch.service" "" "[Install]" "WantedBy=default.target" >"$wdir/omawall-watch.path.new"
+  printf '%s\n' "# X-Omawall-Managed" "[Unit]" "Description=omawall: clean up after the Omarchy plugin" "" \
+    "[Service]" "Type=oneshot" "ExecStart=/bin/bash %h/.local/share/omawall/omawall-plugin off-if-disabled" >"$wdir/omawall-watch.service.new"
+  for f in omawall-watch.path omawall-watch.service; do
+    if cmp -s "$wdir/$f.new" "$wdir/$f"; then rm -f "$wdir/$f.new"; else mv -f "$wdir/$f.new" "$wdir/$f"; wchanged=1; fi
+  done
+  [[ ${wchanged:-0} == 1 ]] && systemctl --user daemon-reload
+  systemctl --user enable --now omawall-watch.path >/dev/null 2>&1
+
   systemctl --user enable omawall.service >/dev/null 2>&1
   if (( changed )) && systemctl --user is-active -q omawall.service; then
     systemctl --user restart omawall.service
@@ -128,11 +142,16 @@ off_if_disabled() {
   if [[ -f $HOME/.config/omarchy/plugins/$ID/manifest.json ]] &&
      jq -e --arg id "$ID" '[.. | objects | select(.id? == $id)] | length > 0' "$cfg" >/dev/null 2>&1 &&
      ! jq -e --arg id "$ID" '(.disabledPlugins // []) | index($id) != null' "$cfg" >/dev/null 2>&1; then
-    echo off: still enabled, nothing to do
     exit 0
   fi
+  echo "== $(date '+%F %T') plugin disabled or removed, cleaning up"
   systemctl --user disable --now omawall.service >/dev/null 2>&1
   grep -q X-Omawall-Managed "$UNIT" 2>/dev/null && rm -f "$UNIT"
+  systemctl --user disable omawall-watch.path >/dev/null 2>&1
+  systemctl --user stop omawall-watch.path >/dev/null 2>&1
+  for f in omawall-watch.path omawall-watch.service; do
+    grep -q X-Omawall-Managed "${UNIT%/*}/$f" 2>/dev/null && rm -f "${UNIT%/*}/$f"
+  done
   systemctl --user daemon-reload
 
   [[ -f $HYPR/bindings.lua ]] && sed -i '/omawall/d' "$HYPR/bindings.lua"
