@@ -39,8 +39,11 @@ Omarchy warns that plugins run unsandboxed code and asks to confirm — choose *
 
 That's it. After a few seconds:
 
-- the wallpaper is drawn by omawall (Omarchy's own background plugin is switched off so the two do not fight);
-- a new button appears on the bar.
+- the wallpaper is drawn by omawall (Omarchy's own background plugin is switched off so the two do not fight, and switched back on when you disable omawall);
+- a new button appears on the bar;
+- `Super + Ctrl + Space` opens the picker.
+
+omawall does not edit your config files: the key binding is set at runtime with `hyprctl eval`.
 
 You can also install it without a terminal: **Omarchy menu → Setup → Plugins → Add Plugin**, paste the address `https://github.com/KiraYoshikage7777/omawall` and confirm.
 
@@ -50,8 +53,9 @@ Open the picker with any of these:
 
 - `Super + Ctrl + Space`
 - the omawall button on the bar (right click opens settings)
-- **Omarchy menu → Style → Background**
 - a double click on the desktop wallpaper
+
+**Omarchy menu → Style → Background** keeps working too: it opens Omarchy's own theme background switcher, and omawall shows what you pick there.
 
 | Key | Action |
 |---|---|
@@ -99,7 +103,7 @@ omarchy plugin remove kirayoshikage7777.omawall    # remove completely
 ```
 
 Or in the menu: **Omarchy menu → Setup → Plugins → Enable / Disable / Remove Plugin**.
-Disabling restores everything omawall changed: Omarchy's background, the `Super + Ctrl + Space` binding and the menu entry. Your wallpapers, favourites and settings are kept in `~/.config/omawall` and `~/.local/state/omawall`.
+Disabling or removing restores Omarchy's background and its own `Super + Ctrl + Space` binding. Your wallpapers, favourites and settings are kept in `~/.config/omawall` and `~/.local/state/omawall`.
 
 ## Commands
 
@@ -163,7 +167,9 @@ omarchy plugin add https://github.com/KiraYoshikage7777/omawall --enable
 
 Omarchy предупредит, что плагины работают без песочницы, и спросит подтверждение — выберите **Да**. Если спросит, куда поставить кнопку на панели, выберите любой раздел (например, `right`).
 
-Всё. Через несколько секунд обои рисует omawall (штатный фон Omarchy отключается, чтобы два движка не мешали друг другу), а на панели появляется кнопка.
+Всё. Через несколько секунд обои рисует omawall (штатный фон Omarchy отключается, чтобы два движка не мешали друг другу, и включается обратно, когда вы отключите omawall), на панели появляется кнопка, а `Super + Ctrl + Space` открывает меню.
+
+omawall не правит ваши файлы настроек: клавиша задаётся на лету через `hyprctl eval`.
 
 Можно и без терминала: **меню Omarchy → Настройка → Плагины → Добавить плагин**, вставьте адрес `https://github.com/KiraYoshikage7777/omawall` и подтвердите.
 
@@ -173,8 +179,9 @@ Omarchy предупредит, что плагины работают без п
 
 - клавишами `Super + Ctrl + Space`;
 - кнопкой omawall на панели (правая кнопка мыши — настройки);
-- через **меню Omarchy → Стиль → Фон**;
 - двойным щелчком по обоям на рабочем столе.
+
+**Меню Omarchy → Стиль → Фон** тоже работает: открывается штатный выбор фонов темы Omarchy, а omawall показывает выбранное там.
 
 | Клавиша | Действие |
 |---|---|
@@ -222,7 +229,7 @@ omarchy plugin remove kirayoshikage7777.omawall    # удалить полнос
 ```
 
 Или через меню: **меню Omarchy → Настройка → Плагины → Включить / Отключить / Удалить плагин**.
-При отключении omawall возвращает всё, что менял: фон Omarchy, клавиши `Super + Ctrl + Space` и пункт меню. Ваши обои, избранное и настройки остаются в `~/.config/omawall` и `~/.local/state/omawall`.
+При отключении или удалении возвращаются штатный фон Omarchy и его собственная клавиша `Super + Ctrl + Space`. Ваши обои, избранное и настройки остаются в `~/.config/omawall` и `~/.local/state/omawall`.
 
 ## Команды
 

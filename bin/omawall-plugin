@@ -15,7 +15,6 @@ mkdir -p "$SHARE" "$STATE"
 exec >>"$LOG" 2>&1
 [[ ${1:-} == off-if-disabled ]] || echo "== $(date '+%F %T') $*"
 
-menu_action="$SHARE/omawall toggle"
 
 on() {
   local src=$1
@@ -101,34 +100,34 @@ U
     systemctl --user start omawall.service
   fi
 
-  # Super+Ctrl+Space and a layer rule (Omarchy's Lua Hyprland config).
-  if [[ -f $HYPR/bindings.lua ]] && ! grep -q 'omawall toggle' "$HYPR/bindings.lua"; then
-    cp -p "$HYPR/bindings.lua" "$STATE/bindings.lua.bak"
-    printf '\n-- omawall: wallpaper picker (added by the omawall plugin)\no.rebind("SUPER + CTRL + SPACE", "Wallpaper picker", "%s")\n' "$menu_action" >>"$HYPR/bindings.lua"
-    reload=1
-  fi
-  if [[ -f $HYPR/looknfeel.lua ]] && ! grep -q 'omawall' "$HYPR/looknfeel.lua"; then
-    printf '\n-- omawall: the plugin animates its own layers\nhl.layer_rule({ match = { namespace = "^omawall" }, no_anim = true, animation = "none" })\n' >>"$HYPR/looknfeel.lua"
-    reload=1
-  fi
-  [[ ${reload:-0} == 1 ]] && hyprctl reload >/dev/null 2>&1
-
-  # Omarchy menu → Style → Background opens the picker.
-  mkdir -p "${MENU%/*}"
-  if [[ ! -f $MENU ]]; then
-    printf '{\n  "appearance.background": {"action": "%s"}\n}\n' "$menu_action" >"$MENU"
-    echo created >"$STATE/menu-prev"
-  elif ! grep -q 'omawall toggle' "$MENU"; then
-    if grep -q '"appearance.background"' "$MENU"; then
-      grep '"appearance.background"' "$MENU" | head -1 >"$STATE/menu-prev"
-      sed -i "/\"appearance.background\"/ s#\"action\": *\"\\([^\"\\\\]\\|\\\\.\\)*\"#\"action\": \"$menu_action\"#" "$MENU"
-      grep -q 'omawall toggle' "$MENU" || sed -i "/\"appearance.background\"/ s#}\\s*,\\?\\s*\$#, \"action\": \"$menu_action\"},#" "$MENU"
-    else
-      echo inserted >"$STATE/menu-prev"
-      sed -i "0,/{/ s#{#{\n  \"appearance.background\": {\"action\": \"$menu_action\"},#" "$MENU"
-    fi
-  fi
+  # Older versions wrote a key binding, a layer rule and a menu entry into the
+  # user's files. This version sets them at runtime instead (see Service.qml),
+  # so take out only the lines those versions added.
+  cleanup_files
   echo on: done
+}
+
+# Remove only what older omawall versions added to the user's files.
+cleanup_files() {
+  local changed=0
+  for f in "$HYPR/bindings.lua" "$HYPR/looknfeel.lua"; do
+    if [[ -f $f ]] && grep -q '^-- omawall:\|^o.rebind(.*omawall\|^hl.layer_rule(.*omawall' "$f"; then
+      sed -i '/^-- omawall:/d; /^o.rebind(.*omawall/d; /^hl.layer_rule(.*omawall/d' "$f"
+      changed=1
+    fi
+  done
+  if [[ -f $MENU ]] && grep -q 'omawall toggle' "$MENU"; then
+    prev=$(cat "$STATE/menu-prev" 2>/dev/null)
+    case $prev in
+      created) rm -f "$MENU" ;;
+      inserted) sed -i '/"appearance.background".*omawall toggle/d' "$MENU" ;;
+      "") ;; # not ours: someone else pointed the menu at omawall
+      *) L="$prev" awk '/"appearance.background".*omawall toggle/ { print ENVIRON["L"]; next } { print }' "$MENU" >"$MENU.tmp" && mv "$MENU.tmp" "$MENU" ;;
+    esac
+    rm -f "$STATE/menu-prev"
+  fi
+  (( changed )) && hyprctl reload >/dev/null 2>&1
+  return 0
 }
 
 off_if_disabled() {
@@ -154,20 +153,9 @@ off_if_disabled() {
   done
   systemctl --user daemon-reload
 
-  [[ -f $HYPR/bindings.lua ]] && sed -i '/omawall/d' "$HYPR/bindings.lua"
-  [[ -f $HYPR/looknfeel.lua ]] && sed -i '/omawall/d' "$HYPR/looknfeel.lua"
+  cleanup_files
+  # Drops the runtime key binding and brings Omarchy's own back.
   hyprctl reload >/dev/null 2>&1
-
-  if [[ -f $MENU ]]; then
-    prev=$(cat "$STATE/menu-prev" 2>/dev/null)
-    case $prev in
-      created) rm -f "$MENU" ;;
-      inserted) sed -i '/"appearance.background".*omawall toggle/d' "$MENU" ;;
-      "") sed -i '/"appearance.background"/ s#,\? *"action": *"[^"]*omawall toggle"##' "$MENU" ;;
-      *) L="$prev" awk '/"appearance.background".*omawall toggle/ { print ENVIRON["L"]; next } { print }' "$MENU" >"$MENU.tmp" && mv "$MENU.tmp" "$MENU" ;;
-    esac
-    rm -f "$STATE/menu-prev"
-  fi
 
   prev=$(cat "$STATE/plugin-prev" 2>/dev/null)
   if grep -q background <<<"$prev" || [[ -z $prev ]]; then

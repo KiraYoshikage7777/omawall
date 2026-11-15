@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Io
+import Quickshell.Hyprland
 
 // The always-on half of omawall. The wallpaper itself is drawn by the omawall
 // daemon (a systemd user service), not inside the shell: video decoding and
@@ -39,10 +40,29 @@ Scope {
 
   property bool started: false
 
+  // Super+Ctrl+Space and a layer rule are set at runtime through `hyprctl eval`,
+  // never written into your Hyprland files. A config reload drops runtime
+  // settings, so they are set again after each one; disabling the plugin
+  // reloads the config, which brings Omarchy's own binding back.
+  readonly property string hyprSetup:
+      'o.rebind("SUPER + CTRL + SPACE", "Wallpaper picker (omawall)", "' + root.binary + ' toggle")\n'
+    + 'hl.layer_rule({ match = { namespace = "^omawall" }, no_anim = true, animation = "none" })'
+  function applyHyprland() {
+    Quickshell.execDetached(["hyprctl", "eval", root.hyprSetup])
+  }
+
+  Connections {
+    target: Hyprland
+    function onRawEvent(event) {
+      if (root.started && event && String(event.name) === "configreloaded") root.applyHyprland()
+    }
+  }
+
   Component.onCompleted: {
     if (sourceDir === "") return
     started = true
     Quickshell.execDetached(["bash", root.helper, "on", root.sourceDir])
+    root.applyHyprland()
   }
 
   Component.onDestruction: {
