@@ -47,8 +47,15 @@ Scope {
   readonly property string hyprSetup:
       'o.rebind("SUPER + CTRL + SPACE", "Wallpaper picker (omawall)", "' + root.binary + ' toggle")\n'
     + 'hl.layer_rule({ match = { namespace = "^omawall" }, no_anim = true, animation = "none" })'
-  function applyHyprland() {
-    Quickshell.execDetached(["hyprctl", "eval", root.hyprSetup])
+  function applyHyprland() { hyprTimer.restart() }
+  // Hyprland announces a reload a moment before the new config settles, so
+  // the binding is set a little later and checked once more.
+  Timer {
+    id: hyprTimer
+    interval: 600
+    onTriggered: Quickshell.execDetached(["sh", "-c",
+      'for i in 1 2 3; do hyprctl eval "$1" >/dev/null 2>&1; sleep 1; hyprctl binds -j 2>/dev/null | grep -q "Wallpaper picker (omawall)" && exit 0; done',
+      "sh", root.hyprSetup])
   }
 
   Connections {
