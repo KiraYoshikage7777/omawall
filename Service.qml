@@ -49,8 +49,10 @@ Scope {
     if (!started) return
     // The plugin folder may be deleted right after this (remove), so the
     // helper runs from a copy.
+    // Omarchy moves the folder away before unloading on remove, so the helper
+    // also keeps a copy of itself in ~/.local/share/omawall.
     Quickshell.execDetached(["sh", "-c",
-      'dst="${XDG_RUNTIME_DIR:-/tmp}/omawall-plugin-off.sh"; cp -f "$1" "$dst" && exec bash "$dst" off-if-disabled',
+      'dst="${XDG_RUNTIME_DIR:-/tmp}/omawall-plugin-off.sh"; src="$1"; [ -f "$src" ] || src="$HOME/.local/share/omawall/omawall-plugin"; cp -f "$src" "$dst" && exec bash "$dst" off-if-disabled',
       "sh", root.helper])
   }
 }

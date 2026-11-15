@@ -28,6 +28,7 @@ on() {
     install -m755 "$src/bin/omawall" "$SHARE/omawall.new" && mv -f "$SHARE/omawall.new" "$SHARE/omawall"
     changed=1
   fi
+  cp -f "$src/bin/omawall-plugin" "$SHARE/omawall-plugin"
   mkdir -p "$HOME/.local/bin"
   [[ -e $HOME/.local/bin/omawall && ! -L $HOME/.local/bin/omawall ]] && rm -f "$HOME/.local/bin/omawall"
   ln -sfn "$SHARE/omawall" "$HOME/.local/bin/omawall"
@@ -157,7 +158,7 @@ off_if_disabled() {
   rm -f "$STATE/plugin-prev"
 
   [[ -L $HOME/.local/bin/omawall ]] && rm -f "$HOME/.local/bin/omawall"
-  rm -f "$SHARE/omawall"
+  rm -f "$SHARE/omawall" "$SHARE/omawall-plugin"
   echo off: done
 }
 
