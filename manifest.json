@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "id": "kirayoshikage7777.omawall",
+  "name": "omawall",
+  "version": "1.1.0",
+  "author": "KiraYoshikage7777",
+  "license": "MIT",
+  "description": "Fast wallpaper engine and picker: photos, video and Wallpaper Engine workshop wallpapers, live desktop preview, effects, playlists. Light on weak laptops.",
+  "homepage": "https://github.com/KiraYoshikage7777/omawall",
+  "kinds": ["service", "bar-widget"],
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "omawall",
+    "description": "Opens the wallpaper picker. Right click opens its settings.",
+    "category": "Appearance",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "powerSaver": "auto",
+      "keepOnClose": false,
+      "livePreview": true
+    },
+    "schema": [
+      {
+        "key": "powerSaver",
+        "type": "enum",
+        "label": "Power saver",
+        "options": ["auto", "on", "off"],
+        "defaultValue": "auto",
+        "description": "Lighter video and menu. Auto turns it on while on battery and on weak PCs."
+      },
+      {
+        "key": "keepOnClose",
+        "type": "boolean",
+        "label": "Keep wallpaper on close",
+        "description": "Closing the picker keeps the wallpaper you stopped on, no Enter needed.",
+        "defaultValue": false
+      },
+      {
+        "key": "livePreview",
+        "type": "boolean",
+        "label": "Desktop preview",
+        "description": "The wallpaper selected in the picker shows on the desktop at once.",
+        "defaultValue": true
+      }
+    ]
+  }
+}

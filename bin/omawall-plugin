@@ -1,0 +1,168 @@
+#!/bin/bash
+# omawall plugin lifecycle, run by Service.qml.
+#   on <plugin-dir>    install or refresh the daemon, key binding, menu entry
+#   off-if-disabled    if the plugin is no longer enabled, undo all of that
+# Every step is idempotent and quiet: it runs on each shell start.
+set -u
+ID="kirayoshikage7777.omawall"
+SHARE="$HOME/.local/share/omawall"
+STATE="$HOME/.local/state/omawall"
+UNIT="$HOME/.config/systemd/user/omawall.service"
+HYPR="$HOME/.config/hypr"
+MENU="$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
+LOG="$STATE/plugin.log"
+mkdir -p "$SHARE" "$STATE"
+exec >>"$LOG" 2>&1
+echo "== $(date '+%F %T') $*"
+
+menu_action="$SHARE/omawall toggle"
+
+on() {
+  local src=$1
+  [[ -x $src/bin/omawall ]] || { echo "no binary in $src/bin"; exit 1; }
+
+  # Binary: copied out of the plugin folder so remove/update never pulls it
+  # from under the running daemon.
+  local changed=0
+  if ! cmp -s "$src/bin/omawall" "$SHARE/omawall"; then
+    install -m755 "$src/bin/omawall" "$SHARE/omawall.new" && mv -f "$SHARE/omawall.new" "$SHARE/omawall"
+    changed=1
+  fi
+  mkdir -p "$HOME/.local/bin"
+  [[ -e $HOME/.local/bin/omawall && ! -L $HOME/.local/bin/omawall ]] && rm -f "$HOME/.local/bin/omawall"
+  ln -sfn "$SHARE/omawall" "$HOME/.local/bin/omawall"
+
+  # Steam's library for Wallpaper Engine workshop search, from any Steam game.
+  if [[ ! -f $SHARE/libsteam_api.so ]]; then
+    lib=$("$SHARE/omawall" steam lib 2>/dev/null | grep '^/' | head -1)
+    [[ -n $lib ]] && cp -f "$lib" "$SHARE/libsteam_api.so"
+  fi
+
+  # The daemon.
+  mkdir -p "${UNIT%/*}"
+  local unit
+  unit=$(cat <<U
+# X-Omawall-Managed
+[Unit]
+Description=omawall wallpaper daemon
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+ExecStart=$SHARE/omawall daemon
+Restart=on-failure
+RestartSec=1
+Nice=5
+
+[Install]
+WantedBy=graphical-session.target
+U
+)
+  if [[ ! -f $UNIT ]] || [[ $(cat "$UNIT") != "$unit" ]]; then
+    printf '%s\n' "$unit" >"$UNIT"
+    systemctl --user daemon-reload
+    changed=1
+  fi
+
+  # Two wallpaper engines on one layer fight; remember what was on to restore it.
+  if [[ ! -f $STATE/plugin-prev ]]; then
+    {
+      systemctl --user is-enabled -q owed.service 2>/dev/null && echo owed
+      omarchy-plugin-list --json 2>/dev/null | jq -e 'any(.[]; .id == "omarchy.background" and .enabled)' >/dev/null 2>&1 && echo background
+      systemctl --user is-enabled -q skwd-walld.service 2>/dev/null && echo skwd
+    } >"$STATE/plugin-prev"
+  fi
+  for u in owed.service skwd-walld.service skwd-we-adapt.path; do
+    systemctl --user is-enabled -q "$u" 2>/dev/null && systemctl --user disable --now "$u"
+  done
+  if omarchy-plugin-list --json 2>/dev/null | jq -e 'any(.[]; .id == "omarchy.background" and .enabled)' >/dev/null 2>&1; then
+    omarchy-plugin-disable omarchy.background >/dev/null 2>&1 || true
+  fi
+
+  systemctl --user enable omawall.service >/dev/null 2>&1
+  if (( changed )) && systemctl --user is-active -q omawall.service; then
+    systemctl --user restart omawall.service
+  else
+    systemctl --user start omawall.service
+  fi
+
+  # Super+Ctrl+Space and a layer rule (Omarchy's Lua Hyprland config).
+  if [[ -f $HYPR/bindings.lua ]] && ! grep -q 'omawall toggle' "$HYPR/bindings.lua"; then
+    cp -p "$HYPR/bindings.lua" "$STATE/bindings.lua.bak"
+    printf '\n-- omawall: wallpaper picker (added by the omawall plugin)\no.rebind("SUPER + CTRL + SPACE", "Wallpaper picker", "%s")\n' "$menu_action" >>"$HYPR/bindings.lua"
+    reload=1
+  fi
+  if [[ -f $HYPR/looknfeel.lua ]] && ! grep -q 'omawall' "$HYPR/looknfeel.lua"; then
+    printf '\n-- omawall: the plugin animates its own layers\nhl.layer_rule({ match = { namespace = "^omawall" }, no_anim = true, animation = "none" })\n' >>"$HYPR/looknfeel.lua"
+    reload=1
+  fi
+  [[ ${reload:-0} == 1 ]] && hyprctl reload >/dev/null 2>&1
+
+  # Omarchy menu → Style → Background opens the picker.
+  mkdir -p "${MENU%/*}"
+  if [[ ! -f $MENU ]]; then
+    printf '{\n  "appearance.background": {"action": "%s"}\n}\n' "$menu_action" >"$MENU"
+    echo created >"$STATE/menu-prev"
+  elif ! grep -q 'omawall toggle' "$MENU"; then
+    if grep -q '"appearance.background"' "$MENU"; then
+      grep '"appearance.background"' "$MENU" | head -1 >"$STATE/menu-prev"
+      sed -i "/\"appearance.background\"/ s#\"action\": *\"\\([^\"\\\\]\\|\\\\.\\)*\"#\"action\": \"$menu_action\"#" "$MENU"
+      grep -q 'omawall toggle' "$MENU" || sed -i "/\"appearance.background\"/ s#}\\s*,\\?\\s*\$#, \"action\": \"$menu_action\"},#" "$MENU"
+    else
+      echo inserted >"$STATE/menu-prev"
+      sed -i "0,/{/ s#{#{\n  \"appearance.background\": {\"action\": \"$menu_action\"},#" "$MENU"
+    fi
+  fi
+  echo on: done
+}
+
+off_if_disabled() {
+  # A shell restart or reload also gets here: give the shell time to come
+  # back, then act only if the plugin is really disabled or gone.
+  sleep 2
+  # Enabled means: the plugin folder is there and shell.json lists it (as a
+  # service in plugins[] or as a widget in the bar). Asking the shell itself is
+  # not reliable here — during a restart it answers before plugins load.
+  local cfg="$HOME/.config/omarchy/shell.json"
+  if [[ -f $HOME/.config/omarchy/plugins/$ID/manifest.json ]] &&
+     jq -e --arg id "$ID" '[.. | objects | select(.id? == $id)] | length > 0' "$cfg" >/dev/null 2>&1 &&
+     ! jq -e --arg id "$ID" '(.disabledPlugins // []) | index($id) != null' "$cfg" >/dev/null 2>&1; then
+    echo off: still enabled, nothing to do
+    exit 0
+  fi
+  systemctl --user disable --now omawall.service >/dev/null 2>&1
+  grep -q X-Omawall-Managed "$UNIT" 2>/dev/null && rm -f "$UNIT"
+  systemctl --user daemon-reload
+
+  [[ -f $HYPR/bindings.lua ]] && sed -i '/omawall/d' "$HYPR/bindings.lua"
+  [[ -f $HYPR/looknfeel.lua ]] && sed -i '/omawall/d' "$HYPR/looknfeel.lua"
+  hyprctl reload >/dev/null 2>&1
+
+  if [[ -f $MENU ]]; then
+    prev=$(cat "$STATE/menu-prev" 2>/dev/null)
+    case $prev in
+      created) rm -f "$MENU" ;;
+      inserted) sed -i '/"appearance.background".*omawall toggle/d' "$MENU" ;;
+      "") sed -i '/"appearance.background"/ s#,\? *"action": *"[^"]*omawall toggle"##' "$MENU" ;;
+      *) L="$prev" awk '/"appearance.background".*omawall toggle/ { print ENVIRON["L"]; next } { print }' "$MENU" >"$MENU.tmp" && mv "$MENU.tmp" "$MENU" ;;
+    esac
+    rm -f "$STATE/menu-prev"
+  fi
+
+  prev=$(cat "$STATE/plugin-prev" 2>/dev/null)
+  if grep -q background <<<"$prev" || [[ -z $prev ]]; then
+    omarchy-plugin-enable omarchy.background >/dev/null 2>&1 || true
+  fi
+  grep -q owed <<<"$prev" && systemctl --user enable --now owed.service >/dev/null 2>&1
+  rm -f "$STATE/plugin-prev"
+
+  [[ -L $HOME/.local/bin/omawall ]] && rm -f "$HOME/.local/bin/omawall"
+  rm -f "$SHARE/omawall"
+  echo off: done
+}
+
+case ${1:-} in
+  on) on "${2:?plugin dir}" ;;
+  off-if-disabled) off_if_disabled ;;
+  *) echo "usage: omawall-plugin on <dir> | off-if-disabled" >&2; exit 2 ;;
+esac
