@@ -60,10 +60,11 @@ LOOP_FADE = 2        # конец петли плавно переходит в 
 # Запись идёт в отдельном невидимом sway (headless): ни Hyprland, ни демон skwd
 # о нём не знают, поэтому на твоих мониторах при записи ничего не мигает.
 RECORD_JOB = r"""#!/bin/bash
-# $1 — папка сцены, $2 — куда писать, $3 — секунд записи. Запускается внутри sway.
-sleep 3600 | skwd-wall-vk HEADLESS-1 "$1" --scene "$1" --standalone --layer background -o mute=yes &
-sleep 5  # сцене дать загрузиться и разогнаться
-timeout -s INT "$3" wf-recorder -D -o HEADLESS-1 -c libx264 -r 30 -p preset=veryfast -p crf=18 -f "$2"
+# Paths come in through the environment, never through the sway config:
+# a workshop title must not be able to turn into config or shell syntax.
+sleep 3600 | skwd-wall-vk HEADLESS-1 "$OMAWALL_SCENE" --scene "$OMAWALL_SCENE" --standalone --layer background -o mute=yes &
+sleep 5  # let the scene load
+timeout -s INT "$OMAWALL_SECONDS" wf-recorder -D -o HEADLESS-1 -c libx264 -r 30 -p preset=veryfast -p crf=18 -f "$OMAWALL_OUT"
 pkill -P $$
 swaymsg exit
 """
@@ -117,12 +118,15 @@ def record_scene(item, out):
         os.chmod(job, 0o755)
         config = os.path.join(work, "sway.conf")
         with open(config, "w") as f:
+            # The job lives in a private mkdtemp folder; nothing from the
+            # wallpaper itself is written into this file.
             f.write("output HEADLESS-1 resolution 1920x1080\n"
-                    f"exec {shlex.quote(job)} {shlex.quote(folder)} {shlex.quote(raw)} "
-                    f"{RECORD_SECONDS + LOOP_FADE}\n")
+                    f"exec {shlex.quote(job)}\n")
         env = {k: v for k, v in os.environ.items()
                if k not in ("WAYLAND_DISPLAY", "DISPLAY", "HYPRLAND_INSTANCE_SIGNATURE", "SWAYSOCK")}
-        env.update({"WLR_BACKENDS": "headless", "WLR_LIBINPUT_NO_DEVICES": "1"})
+        env.update({"WLR_BACKENDS": "headless", "WLR_LIBINPUT_NO_DEVICES": "1",
+                    "OMAWALL_SCENE": folder, "OMAWALL_OUT": raw,
+                    "OMAWALL_SECONDS": str(RECORD_SECONDS + LOOP_FADE)})
         try:
             subprocess.run(["sway", "--unsupported-gpu", "-c", config], env=env,
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,

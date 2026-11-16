@@ -211,6 +211,13 @@ fn walk(dir: &Path, root: &Path, label: &str, depth: u32, seen_dirs: &mut HashSe
     }
 }
 
+/// `path` resolved, if it really lies inside `dir` (no `..`, absolute paths or symlinks out).
+pub fn inside(dir: &Path, path: &Path) -> Option<PathBuf> {
+    let base = dir.canonicalize().ok()?;
+    let real = path.canonicalize().ok()?;
+    (real.starts_with(&base) && real.is_file()).then_some(real)
+}
+
 pub fn workshop_dir() -> PathBuf {
     config::home().join(".local/share/Steam/steamapps/workshop/content/431960")
 }
@@ -248,8 +255,8 @@ pub fn scan(cfg: &Config) -> Vec<Found> {
                     continue;
                 }
                 let Some(file) = v["file"].as_str() else { continue };
-                let file = dir.join(file);
-                let Ok(real) = file.canonicalize() else { continue };
+                // project.json comes from the workshop: its file must stay inside the item's folder.
+                let Some(real) = inside(&dir, &dir.join(file)) else { continue };
                 if !seen_files.insert(real.clone()) {
                     continue;
                 }

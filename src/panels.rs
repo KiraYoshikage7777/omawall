@@ -1163,7 +1163,14 @@ pub fn downloads(w: &mut W, st: &mut DownloadsSt, c: &mut PanelCtx) {
                                     return Some(image::DynamicImage::ImageRgba8(f.into_buffer()));
                                 }
                             }
-                            image::load_from_memory(&b).ok()
+                            // Pictures from the network: refuse anything huge before decoding.
+                            let mut r = image::ImageReader::new(std::io::Cursor::new(&b)).with_guessed_format().ok()?;
+                            let mut lim = image::Limits::default();
+                            lim.max_image_width = Some(4096);
+                            lim.max_image_height = Some(4096);
+                            lim.max_alloc = Some(64 << 20);
+                            r.limits(lim);
+                            r.decode().ok()
                         }).map(|i| {
                             let i = i.into_rgba8();
                             library::Rgba { w: i.width(), h: i.height(), data: i.into_raw() }

@@ -17,8 +17,25 @@ pub fn state_dir() -> PathBuf {
 pub fn cache_dir() -> PathBuf {
     xdg("XDG_CACHE_HOME", ".cache").join("omawall")
 }
+/// A private runtime directory: XDG_RUNTIME_DIR or /run/user/UID, but only if
+/// it is ours and closed to others; otherwise a private folder in the cache.
 pub fn runtime_dir() -> PathBuf {
-    std::env::var("XDG_RUNTIME_DIR").ok().map(PathBuf::from).unwrap_or_else(|| PathBuf::from(format!("/run/user/{}", unsafe { libc::getuid() })))
+    use std::os::unix::fs::MetadataExt;
+    let uid = unsafe { libc::getuid() };
+    let candidates = std::env::var("XDG_RUNTIME_DIR").ok().filter(|v| v.starts_with('/')).into_iter().chain([format!("/run/user/{uid}")]);
+    for c in candidates {
+        let p = PathBuf::from(c);
+        if let Ok(m) = std::fs::symlink_metadata(&p) {
+            if m.is_dir() && m.uid() == uid && m.mode() & 0o077 == 0 {
+                return p;
+            }
+        }
+    }
+    let p = cache_dir().join("run");
+    let _ = std::fs::create_dir_all(&p);
+    use std::os::unix::fs::PermissionsExt;
+    let _ = std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o700));
+    p
 }
 pub fn socket_path() -> PathBuf {
     if let Ok(p) = std::env::var("OMAWALL_SOCK") {

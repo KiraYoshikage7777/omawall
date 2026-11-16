@@ -34,7 +34,7 @@ pub fn project(dir: &Path) -> Option<Project> {
     Some(Project {
         kind: v["type"].as_str().unwrap_or("").to_lowercase(),
         title: v["title"].as_str().map(|s| s.to_string()).filter(|s| !s.trim().is_empty()).unwrap_or(id),
-        file: v["file"].as_str().map(|f| dir.join(f)),
+        file: v["file"].as_str().and_then(|f| crate::library::inside(dir, &dir.join(f))),
     })
 }
 
@@ -75,20 +75,26 @@ pub fn convert(scene: &Path, target: &Path) -> bool {
     if !converter_ready() {
         return false;
     }
-    let script = config::runtime_dir().join("omawall-we-adapt.py");
-    if std::fs::write(&script, SCRIPT).is_err() {
-        return false;
-    }
-    Command::new("nice")
-        .args(["-n", "10", "python3"])
-        .arg(&script)
+    // The script is handed to Python on stdin: nothing is written to disk first.
+    let Ok(mut child) = Command::new("nice")
+        .args(["-n", "10", "python3", "-I", "-"])
         .arg(scene)
         .arg(target)
-        .stdin(Stdio::null())
+        .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
-        .status()
-        .is_ok_and(|s| s.success())
+        .spawn()
+    else {
+        return false;
+    };
+    if let Some(mut stdin) = child.stdin.take() {
+        use std::io::Write;
+        if stdin.write_all(SCRIPT.as_bytes()).is_err() {
+            let _ = child.kill();
+            return false;
+        }
+    }
+    child.wait().is_ok_and(|s| s.success())
         && target.is_file()
 }
 

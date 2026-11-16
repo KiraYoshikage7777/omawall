@@ -122,6 +122,16 @@ omawall status                 # what is on screen, memory, decoder
 - Restart: `systemctl --user restart omawall`
 - Video does not play: make sure `mpv` is installed (`omarchy pkg add mpv`).
 
+## Where `bin/omawall` comes from
+
+The program in `bin/omawall` is not uploaded by hand: GitHub Actions builds it from the source in this repository ([workflow](.github/workflows/build.yml)) and signs a build-provenance attestation. To check that the file on your disk came from that build:
+
+```bash
+gh attestation verify ~/.config/omarchy/plugins/kirayoshikage7777.omawall/bin/omawall --repo KiraYoshikage7777/omawall
+```
+
+`bin/omawall.sha256` records its checksum and the source commit it was built from.
+
 ## Build from source
 
 ```bash
@@ -247,6 +257,14 @@ omawall status                 # что на экране, память, дек�
 - Журнал плагина: `~/.local/state/omawall/plugin.log`
 - Перезапуск: `systemctl --user restart omawall`
 - Не играет видео: проверьте, что установлен `mpv` (`omarchy pkg add mpv`).
+
+## Откуда берётся `bin/omawall`
+
+Программа в `bin/omawall` не загружается вручную: её собирает GitHub Actions из исходников этого репозитория ([сценарий сборки](.github/workflows/build.yml)) и подписывает сведения о происхождении. Проверить, что файл у вас собран именно там:
+
+```bash
+gh attestation verify ~/.config/omarchy/plugins/kirayoshikage7777.omawall/bin/omawall --repo KiraYoshikage7777/omawall
+```
 
 ## Лицензия
 

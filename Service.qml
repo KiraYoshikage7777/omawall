@@ -45,8 +45,10 @@ Scope {
   // settings, so they are set again after each one; disabling the plugin
   // reloads the config, which brings Omarchy's own binding back.
   readonly property string hyprSetup:
-      'o.rebind("SUPER + CTRL + SPACE", "Wallpaper picker (omawall)", "' + root.binary + ' toggle")\n'
+      'o.rebind("SUPER + CTRL + SPACE", "Wallpaper picker (omawall)", "' + root.luaString(root.binary) + ' toggle")\n'
     + 'hl.layer_rule({ match = { namespace = "^omawall" }, no_anim = true, animation = "none" })'
+  // The binary path goes into a Lua string literal: escape it.
+  function luaString(s) { return String(s).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n") }
   function applyHyprland() { hyprTimer.restart() }
   // Hyprland announces a reload a moment before the new config settles, so
   // the binding is set a little later and checked once more.
@@ -74,12 +76,11 @@ Scope {
 
   Component.onDestruction: {
     if (!started) return
-    // The plugin folder may be deleted right after this (remove), so the
-    // helper runs from a copy.
-    // Omarchy moves the folder away before unloading on remove, so the helper
-    // also keeps a copy of itself in ~/.local/share/omawall.
-    Quickshell.execDetached(["sh", "-c",
-      'dst="${XDG_RUNTIME_DIR:-/tmp}/omawall-plugin-off.sh"; src="$1"; [ -f "$src" ] || src="$HOME/.local/share/omawall/omawall-plugin"; cp -f "$src" "$dst" && exec bash "$dst" off-if-disabled',
-      "sh", root.helper])
+    // Disabling or removing the plugin is also caught by omawall-watch.path,
+    // which reacts to shell.json; this is only the quicker path. It runs the
+    // helper's own copy in ~/.local/share/omawall (installed by "on" and owned
+    // by you) because Omarchy moves the plugin folder away on remove. Nothing
+    // is copied to or run from a shared or temporary directory.
+    Quickshell.execDetached(["bash", Quickshell.env("HOME") + "/.local/share/omawall/omawall-plugin", "off-if-disabled"])
   }
 }

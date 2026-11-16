@@ -1,6 +1,6 @@
 #!/bin/bash
 # Стенд: отдельный невидимый sway, в нём демон omawall со своими настройками и сокетом.
-T=${OMAWALL_TEST_DIR:-/tmp/claude-1000/omawall-test}
+T=${OMAWALL_TEST_DIR:-${XDG_RUNTIME_DIR:?}/omawall-test}
 BIN=${BIN:-$HOME/projects/omawall/target/debug/omawall}
 mkdir -p "$T"/{config,state,cache}
 envs() {

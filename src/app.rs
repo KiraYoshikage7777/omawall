@@ -1064,7 +1064,9 @@ impl App {
         let _ = stream.set_read_timeout(Some(Duration::from_millis(300)));
         let _ = stream.set_write_timeout(Some(Duration::from_millis(300)));
         let mut line = String::new();
-        if BufReader::new(&stream).read_line(&mut line).is_err() {
+        // One short command per connection; a client cannot make the daemon buffer more.
+        use std::io::Read;
+        if BufReader::new((&stream).take(64 * 1024)).read_line(&mut line).is_err() {
             return;
         }
         let args: Vec<String> = line.trim_end_matches('\n').split('\x1f').map(|s| s.to_string()).collect();
